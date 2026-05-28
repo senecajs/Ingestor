@@ -4,6 +4,7 @@
 const fs = require('fs')
 const path = require('path')
 const XLSX = require('xlsx')
+const { Document, Paragraph, Packer } = require('docx')
 
 const BUCKET_FILES = path.join(__dirname, '../data/bucket/files')
 
@@ -45,6 +46,15 @@ function createMinimalXLSX(sheetName, rows) {
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
 }
 
+async function createMinimalDOCX(paragraphs) {
+  const doc = new Document({
+    sections: [{
+      children: paragraphs.map((text) => new Paragraph(text)),
+    }],
+  })
+  return Packer.toBuffer(doc)
+}
+
 fs.mkdirSync(BUCKET_FILES, { recursive: true })
 
 const pdfBuf = createMinimalPDF('Seneca Ingestor Sample Document')
@@ -58,3 +68,12 @@ const xlsxBuf = createMinimalXLSX('Employees', [
 ])
 fs.writeFileSync(path.join(BUCKET_FILES, 'sample.xlsx'), xlsxBuf)
 console.log(`Created sample.xlsx (${xlsxBuf.length} bytes)`)
+
+createMinimalDOCX([
+  'Seneca Ingestor Sample Document',
+  'This is the first paragraph of the sample Word document.',
+  'This is the second paragraph with more content.',
+]).then((docxBuf) => {
+  fs.writeFileSync(path.join(BUCKET_FILES, 'sample.docx'), docxBuf)
+  console.log(`Created sample.docx (${docxBuf.length} bytes)`)
+})

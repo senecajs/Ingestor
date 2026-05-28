@@ -157,6 +157,69 @@ function Ingestor(this: any, options: Options) {
     },
   )
 
+  // DOCX handler — extracts text with mammoth and writes one ingest/doc entity
+  // plus one ingest/paragraph entity per paragraph.
+  // Idempotent: same filename + content hash → skips if already done.
+  seneca.message(
+    'role:ingest,process:file,kind:docx',
+    async function (this: any, msg: any) {
+      const seneca = this
+      const { filename, content } = msg
+
+      const hash = hashContent(content)
+
+      const existing = await seneca
+        .entity('ingest/doc')
+        .list$({ filename, hash })
+
+      if (existing.length > 0 && 'done' === existing[0].status) {
+        return { ok: true, why: 'already-processed', doc_id: existing[0].id }
+      }
+
+      let docEnt: any =
+        existing.length > 0
+          ? existing[0]
+          : await seneca
+              .entity('ingest/doc')
+              .make$()
+              .data$({ filename, hash, kind: 'docx', status: 'processing' })
+              .save$()
+
+      let paragraphs: string[] = []
+      try {
+        const mammoth = require('mammoth')
+        const result = await mammoth.extractRawText({ buffer: content })
+        paragraphs = result.value
+          .split('\n')
+          .map((p: string) => p.trim())
+          .filter((p: string) => p.length > 0)
+      } catch (err: any) {
+        return { ok: false, why: 'docx-parse-error', err: err.message }
+      }
+
+      for (let i = 0; i < paragraphs.length; i++) {
+        const para_num = i + 1
+        const existingParas = await seneca
+          .entity('ingest/paragraph')
+          .list$({ doc_id: docEnt.id, para_num })
+
+        if (existingParas.length === 0) {
+          await seneca
+            .entity('ingest/paragraph')
+            .make$()
+            .data$({ doc_id: docEnt.id, para_num, text: paragraphs[i] })
+            .save$()
+        }
+      }
+
+      docEnt.status = 'done'
+      docEnt.paragraph_count = paragraphs.length
+      await docEnt.save$()
+
+      return { ok: true, doc_id: docEnt.id, paragraph_count: paragraphs.length }
+    },
+  )
+
   // XLSX handler — parses the workbook and writes one ingest/doc entity plus
   // one ingest/sheet entity per sheet.
   // Idempotent: same filename + content hash → skips if already done.

@@ -55,7 +55,7 @@ describe('Ingestor', () => {
     const result = await seneca.post('role:ingest,cmd:run', {})
 
     expect(result.ok).toBe(true)
-    expect(result.count).toBe(2)
+    expect(result.count).toBe(3)
 
     await seneca.close()
   }, 30000)
@@ -152,6 +152,30 @@ describe('Ingestor', () => {
       .entity('ingest/sheet')
       .list$({ doc_id: r1.doc_id })
     expect(sheets.length).toBe(1)
+
+    await seneca.close()
+  })
+
+  test('process-docx', async () => {
+    const seneca = makeSeneca()
+    await seneca.ready()
+
+    const result = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.docx',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.doc_id).toBeDefined()
+    expect(result.paragraph_count).toBeGreaterThan(0)
+
+    const docEnt = await seneca.entity('ingest/doc').load$(result.doc_id)
+    expect(docEnt.status).toBe('done')
+    expect(docEnt.kind).toBe('docx')
+
+    const paragraphs = await seneca
+      .entity('ingest/paragraph')
+      .list$({ doc_id: result.doc_id })
+    expect(paragraphs.length).toBeGreaterThan(0)
 
     await seneca.close()
   })
