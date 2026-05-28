@@ -106,6 +106,56 @@ describe('Ingestor', () => {
     await seneca.close()
   }, 30000)
 
+  test('process-xlsx', async () => {
+    const seneca = makeSeneca()
+    await seneca.ready()
+
+    const result = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.xlsx',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.doc_id).toBeDefined()
+    expect(result.sheet_count).toBe(1)
+
+    const docEnt = await seneca.entity('ingest/doc').load$(result.doc_id)
+    expect(docEnt.status).toBe('done')
+    expect(docEnt.kind).toBe('xlsx')
+
+    const sheets = await seneca
+      .entity('ingest/sheet')
+      .list$({ doc_id: result.doc_id })
+    expect(sheets.length).toBe(1)
+    expect(sheets[0].sheet_name).toBe('Employees')
+    expect(sheets[0].row_count).toBe(3)
+
+    await seneca.close()
+  })
+
+  test('idempotent-xlsx', async () => {
+    const seneca = makeSeneca()
+    await seneca.ready()
+
+    const r1 = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.xlsx',
+    })
+    expect(r1.ok).toBe(true)
+
+    const r2 = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.xlsx',
+    })
+    expect(r2.ok).toBe(true)
+    expect(r2.why).toBe('already-processed')
+    expect(r2.doc_id).toBe(r1.doc_id)
+
+    const sheets = await seneca
+      .entity('ingest/sheet')
+      .list$({ doc_id: r1.doc_id })
+    expect(sheets.length).toBe(1)
+
+    await seneca.close()
+  })
+
   test('unsupported-kind', async () => {
     const seneca = makeSeneca()
     await seneca.ready()

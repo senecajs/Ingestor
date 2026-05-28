@@ -156,6 +156,74 @@ function Ingestor(this: any, options: Options) {
     },
   )
 
+  // XLSX handler — parses the workbook and writes one ingest/doc entity plus
+  // one ingest/sheet entity per sheet.
+  // Idempotent: same filename + content hash → skips if already done.
+  seneca.message(
+    'role:ingest,process:file,kind:xlsx',
+    async function (this: any, msg: any) {
+      const seneca = this
+      const { filename, content } = msg
+
+      const hash = hashContent(content)
+
+      const existing = await seneca
+        .entity('ingest/doc')
+        .list$({ filename, hash })
+
+      if (existing.length > 0 && 'done' === existing[0].status) {
+        return { ok: true, why: 'already-processed', doc_id: existing[0].id }
+      }
+
+      let docEnt: any =
+        existing.length > 0
+          ? existing[0]
+          : await seneca
+              .entity('ingest/doc')
+              .make$()
+              .data$({ filename, hash, kind: 'xlsx', status: 'processing' })
+              .save$()
+
+      let sheets: Array<{ name: string; rows: any[][] }> = []
+      try {
+        const XLSX = require('xlsx')
+        const workbook = XLSX.read(content, { type: 'buffer' })
+        for (const sheetName of workbook.SheetNames) {
+          const ws = workbook.Sheets[sheetName]
+          const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 })
+          sheets.push({ name: sheetName, rows })
+        }
+      } catch (err: any) {
+        return { ok: false, why: 'xlsx-parse-error', err: err.message }
+      }
+
+      for (const sheet of sheets) {
+        const existingSheets = await seneca
+          .entity('ingest/sheet')
+          .list$({ doc_id: docEnt.id, sheet_name: sheet.name })
+
+        if (existingSheets.length === 0) {
+          await seneca
+            .entity('ingest/sheet')
+            .make$()
+            .data$({
+              doc_id: docEnt.id,
+              sheet_name: sheet.name,
+              row_count: sheet.rows.length,
+              rows: sheet.rows,
+            })
+            .save$()
+        }
+      }
+
+      docEnt.status = 'done'
+      docEnt.sheet_count = sheets.length
+      await docEnt.save$()
+
+      return { ok: true, doc_id: docEnt.id, sheet_count: sheets.length }
+    },
+  )
+
   return {
     name: 'Ingestor',
   }
