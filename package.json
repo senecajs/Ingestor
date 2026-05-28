@@ -44,6 +44,7 @@
   "devDependencies": {
     "@seneca/doc": "^7.2.0",
     "@seneca/maintain": "^0.1.0",
+    "@seneca/s3-store": "^2.5.0",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.24",
     "@types/pdf-parse": "^1.1.5",
@@ -64,7 +65,6 @@
     "dist"
   ],
   "dependencies": {
-    "@seneca/s3-store": "^2.5.0",
     "file-type": "^14.7.1",
     "pdf-parse": "^2.4.5",
     "xlsx": "^0.18.5"
