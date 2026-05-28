@@ -2,6 +2,7 @@
 
 import Path from 'path'
 import Fsp from 'fs/promises'
+import Crypto from 'crypto'
 
 type Options = {
   debug: boolean
@@ -87,9 +88,81 @@ function Ingestor(this: any, options: Options) {
     )
   })
 
+  // PDF handler — parses the PDF and writes one ingest/doc entity plus one
+  // ingest/page entity per page.
+  // Idempotent: same filename + content hash → skips if already done.
+  seneca.message(
+    'role:ingest,process:file,kind:pdf',
+    async function (this: any, msg: any) {
+      const seneca = this
+      const { filename, content } = msg
+
+      const hash = hashContent(content)
+
+      const existing = await seneca
+        .entity('ingest/doc')
+        .list$({ filename, hash })
+
+      if (existing.length > 0 && 'done' === existing[0].status) {
+        return { ok: true, why: 'already-processed', doc_id: existing[0].id }
+      }
+
+      let docEnt: any =
+        existing.length > 0
+          ? existing[0]
+          : await seneca
+              .entity('ingest/doc')
+              .make$()
+              .data$({ filename, hash, kind: 'pdf', status: 'processing' })
+              .save$()
+
+      let pages: string[] = []
+      try {
+        const { PDFParse } = require('pdf-parse')
+        const parser = new PDFParse({ data: content })
+        const data = await parser.getText()
+        await parser.destroy()
+        pages = data.text
+          .split(/\f/)
+          .map((p: string) => p.trim())
+          .filter((p: string) => p.length > 0)
+        if (pages.length === 0) {
+          pages = [data.text.trim()]
+        }
+      } catch (err: any) {
+        return { ok: false, why: 'pdf-parse-error', err: err.message }
+      }
+
+      for (let i = 0; i < pages.length; i++) {
+        const page_num = i + 1
+        const existingPages = await seneca
+          .entity('ingest/page')
+          .list$({ doc_id: docEnt.id, page_num })
+
+        if (existingPages.length === 0) {
+          await seneca
+            .entity('ingest/page')
+            .make$()
+            .data$({ doc_id: docEnt.id, page_num, text: pages[i] })
+            .save$()
+        }
+      }
+
+      docEnt.status = 'done'
+      docEnt.page_count = pages.length
+      await docEnt.save$()
+
+      return { ok: true, doc_id: docEnt.id, page_count: pages.length }
+    },
+  )
+
   return {
     name: 'Ingestor',
   }
+}
+
+function hashContent(content: Buffer): string {
+  return Crypto.createHash('sha256').update(content).digest('hex')
 }
 
 const defaults: Options = {
