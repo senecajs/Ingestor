@@ -17,7 +17,7 @@ function makeSeneca() {
     .use('promisify')
     .use('entity')
     .use(S3Store, {
-      map: { '-/sys/ingest_file': '*' },
+      map: { '-/ingest/file': '*' },
       folder: FILES_PREFIX,
       shared: { Bucket: 'ingestor-local-bucket' },
       s3: { Region: 'us-east-1' },
@@ -26,7 +26,7 @@ function makeSeneca() {
         folder: BUCKET_FOLDER,
       },
       ent: {
-        '-/sys/ingest_file': { bin: 'content' },
+        '-/ingest/file': { bin: 'content' },
       },
     })
     .use(Ingestor, {

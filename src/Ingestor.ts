@@ -16,7 +16,7 @@ export type IngestorOptions = Partial<Options>
 function Ingestor(this: any, options: Options) {
   const seneca: any = this
 
-  // List files from the local S3 bucket folder and process each one.
+  // List files from the S3 bucket folder and process each one.
   // In local mode the s3-store list$() returns [] so we use Fsp.readdir
   // directly on the bucket folder.
   seneca.message('role:ingest,cmd:run', async function (this: any, msg: any) {
@@ -64,7 +64,7 @@ function Ingestor(this: any, options: Options) {
 
     const filename: string = msg.filename
 
-    const fileEnt = await seneca.entity('sys/ingest_file').load$(filename)
+    const fileEnt = await seneca.entity('ingest/file').load$(filename)
     if (!fileEnt) {
       return { ok: false, why: 'file-not-found', filename }
     }
