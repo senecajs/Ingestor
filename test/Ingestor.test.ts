@@ -156,6 +156,36 @@ describe('Ingestor', () => {
     await seneca.close()
   })
 
+  test('context-routing', async () => {
+    const seneca = makeSeneca()
+    await seneca.ready()
+
+    // Register a context-specific handler — only fires for PDFs from 'invoices'
+    seneca.message(
+      'role:ingest,process:file,kind:pdf,source:invoices',
+      async function (this: any, msg: any) {
+        return { ok: true, why: 'invoices-handler', filename: msg.filename }
+      },
+    )
+
+    const result = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.pdf',
+      source: 'invoices',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.why).toBe('invoices-handler')
+
+    // Without source — routes to the generic PDF handler instead
+    const result2 = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.pdf',
+    })
+    expect(result2.ok).toBe(true)
+    expect(result2.why).not.toBe('invoices-handler')
+
+    await seneca.close()
+  }, 30000)
+
   test('unsupported-kind', async () => {
     const seneca = makeSeneca()
     await seneca.ready()

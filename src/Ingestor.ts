@@ -64,6 +64,7 @@ function Ingestor(this: any, options: Options) {
     }
 
     const filename: string = msg.filename
+    const source: string | undefined = msg.source
 
     const fileEnt = await seneca.entity('ingest/file').load$(filename)
     if (!fileEnt) {
@@ -83,8 +84,8 @@ function Ingestor(this: any, options: Options) {
     console.log(`File: ${filename}, Size: ${bytes} bytes, Kind: ${kind}`)
 
     return seneca.post(
-      { role: 'ingest', process: 'file', kind },
-      { filename, content, kind, bytes },
+      { role: 'ingest', process: 'file', kind, ...(source ? { source } : {}) },
+      { filename, content, kind, bytes, source },
     )
   })
 
