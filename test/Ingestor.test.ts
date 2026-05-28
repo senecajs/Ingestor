@@ -1,6 +1,7 @@
 /* Copyright © 2024 Seneca Project Contributors, MIT License. */
 
 import * as path from 'path'
+import { describe, test, expect } from '@jest/globals'
 
 import Seneca from 'seneca'
 import S3Store from '@seneca/s3-store'

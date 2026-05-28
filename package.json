@@ -46,7 +46,7 @@
     "@seneca/maintain": "^0.1.0",
     "@seneca/s3-store": "^2.5.0",
     "@types/jest": "^29.5.12",
-    "@types/node": "^20.11.24",
+    "@types/node": "^20.19.41",
     "@types/pdf-parse": "^1.1.5",
     "dotenv": "^16.4.5",
     "esbuild": "^0.20.1",
