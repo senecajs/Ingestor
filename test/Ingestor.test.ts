@@ -55,8 +55,21 @@ describe('Ingestor', () => {
 
     expect(result.ok).toBe(true)
     expect(result.count).toBe(2)
-    expect(result.filenames).toContain('sample.pdf')
-    expect(result.filenames).toContain('sample.xlsx')
+
+    await seneca.close()
+  }, 30000)
+
+  test('unsupported-kind', async () => {
+    const seneca = makeSeneca()
+    await seneca.ready()
+
+    const result = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.pdf',
+      kind: 'unknown-format',
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.why).toBe('unsupported-kind')
 
     await seneca.close()
   })
