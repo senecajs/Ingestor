@@ -16,6 +16,7 @@ It uses Seneca's pattern matching to route each file to a type-specific handler 
 Currently supported file types:
 
 - **PDF** — writes one `ingest/doc` entity and one `ingest/page` entity per page
+- **XLSX** — writes one `ingest/doc` entity and one `ingest/sheet` entity per sheet
 
 ## Install
 
@@ -79,7 +80,8 @@ console.log(result)
 | ----------------------------------- | ----------------------------------------------------------------------------- |
 | `role:ingest,cmd:run`               | Lists all files in the bucket and dispatches `process:file` for each one      |
 | `role:ingest,process:file`          | Reads a file from S3, detects its type, and routes to a kind-specific handler |
-| `role:ingest,process:file,kind:pdf` | Parses a PDF and writes `ingest/doc` + `ingest/page` entities                 |
+| `role:ingest,process:file,kind:pdf`  | Parses a PDF and writes `ingest/doc` + `ingest/page` entities                  |
+| `role:ingest,process:file,kind:xlsx` | Parses an XLSX workbook and writes `ingest/doc` + `ingest/sheet` entities      |
 
 ## Entities
 
@@ -87,9 +89,10 @@ console.log(result)
 | ------------- | ---------- | ---------------------------------------------------------------- |
 | `ingest/file` | s3-store   | Raw binary file read from S3. Configured by the host app.        |
 | `ingest/doc`  | host store | One per processed file — metadata (filename, hash, kind, status) |
-| `ingest/page` | host store | One per PDF page, linked to `ingest/doc` via `doc_id`            |
+| `ingest/page`  | host store | One per PDF page, linked to `ingest/doc` via `doc_id`             |
+| `ingest/sheet` | host store | One per XLSX sheet, linked to `ingest/doc` via `doc_id`           |
 
-`ingest/doc` and `ingest/page` are stored in whatever store the host app configures for them. By default Seneca uses its in-memory store.
+`ingest/doc`, `ingest/page`, and `ingest/sheet` are stored in whatever store the host app configures for them. By default Seneca uses its in-memory store.
 
 ## Local Development
 
