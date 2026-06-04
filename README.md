@@ -1,152 +1,127 @@
 ![Seneca](http://senecajs.org/files/assets/seneca-logo.png)
-> A [Seneca.js][] data storage plugin.
 
-# SenecaOpensearchStore
-[![npm version][npm-badge]][npm-url]
-[![Build](https://github.com/senecajs/SenecaOpensearchStore/actions/workflows/build.yml/badge.svg)](https://github.com/senecajs/seneca-OpensearchStore/actions/workflows/build.yml)
-[![Dependency Status][david-badge]][david-url]
-[![Maintainability](https://api.codeclimate.com/v1/badges/e2cdcc5415161cb378b0/maintainability)](https://codeclimate.com/github/senecajs/SenecaOpensearchStore/maintainability)
-[![DeepScan grade](https://deepscan.io/api/teams/5016/projects/17225/branches/388415/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=5016&pid=17225&bid=388415)
-[![Coveralls][BadgeCoveralls]][Coveralls]
+> A [Seneca.js][] file ingestion plugin.
 
-
+# @seneca/ingestor
 
 | ![Voxgig](https://www.voxgig.com/res/img/vgt01r.png) | This open source module is sponsored and supported by [Voxgig](https://www.voxgig.com). |
-|---|---|
-
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
 
 ## Description
 
-This module is a plugin for the Seneca framework. It provides an
-in-memory storage engine that provides a set of data storage action
-patterns. *Data does not persist betweens runs*.  This plugin is most
-useful for early development and unit testing. It also provides an
-example of a document-oriented storage plugin code-base.
+`@seneca/ingestor` is a Seneca plugin that reads binary files from an S3 bucket (or a local folder in development), detects their type, and writes structured entities for downstream processing.
 
-The Seneca framework provides an [ActiveRecord-style data storage API][].
-Each supported database has a plugin, such as this one, that provides
-the underlying Seneca plugin actions required for data persistence.
+It uses Seneca's pattern matching to route each file to a type-specific handler based on the detected file kind (e.g. `kind:pdf`).
 
-This plugin is loaded by default by the [seneca-entity][seneca-entity-url] plugin that also needs the [seneca-basic][seneca-basic-url] plugin to function properly.
+Currently supported file types:
 
-If you're using this module, and need help, you can:
-
-- Post a [github issue][],
-- Tweet to [@senecajs][],
-- Ask on the [Gitter][gitter-url].
-
-If you are new to Seneca in general, please take a look at [senecajs.org][]. We have everything from
-tutorials to sample apps to help get you up and running quickly.
-
-
-## Code examples
-
-For code samples, please see the [tests][OpensearchStore-tests] for this plugin.
-
-### Seneca compatibility
-Supports Seneca versions **2.x** and above
-
-
-### Supported functionality
-All Seneca data store supported functionality is implemented in [seneca-store-test](https://github.com/senecajs/seneca-store-test) as a test suite. The tests represent the store functionality specifications.
+- **PDF** — writes one `ingest/doc` entity and one `ingest/page` entity per page
+- **XLSX** — writes one `ingest/doc` entity and one `ingest/sheet` entity per sheet
+- **DOCX** — writes one `ingest/doc` entity and one `ingest/paragraph` entity per paragraph
 
 ## Install
 
 ```sh
-npm install seneca
-npm install SenecaOpensearchStore
+npm install @seneca/ingestor
 ```
 
-You'll need the [seneca](http://github.com/senecajs/seneca) toolkit to use this module - it's just a plugin.
-
-## Quick Example
-
-```js
-var seneca = require('seneca')()
-
-seneca.use('basic')
-.use('entity')
-
-// Since OpensearchStore is a default plugin, it does not need to be
-// added with .use(). You can just go ahead and use it.
-seneca.ready(function () {
-  var apple = seneca.make$('fruit')
-  apple.name = 'Pink Lady'
-  apple.price = 0.99
-
-  apple.save$(function (err, apple) {
-    console.log("apple.id = " + apple.id)
-  })
-})
-```
-
-## Usage
-You don't use this module directly. It provides an underlying data storage engine for the Seneca entity API:
-
-```js
-var entity = seneca.make$('typename')
-entity.someproperty = "something"
-entity.anotherproperty = 100
-
-entity.save$(function (err, entity) { ... })
-entity.load$({id: ... }, function (err, entity) { ... })
-entity.list$({property: ... }, function (err, entity) { ... })
-entity.remove$({id: ... }, function (err, entity) { ... })
-```
-
-### Query Support
-The standard Seneca query format is supported:
-
-- `.list$({f1:v1, f2:v2, ...})` implies pseudo-query `f1==v1 AND f2==v2, ...`.
-
-- `.list$({f1:v1,...}, {sort$:{field1:1}})` means sort by f1, ascending.
-
-- `.list$({f1:v1,...}, {sort$:{field1:-1}})` means sort by f1, descending.
-
-- `.list$({f1:v1,...}, {limit$:10})` means only return 10 results.
-
-- `.list$({f1:v1,...}, {skip$:5})` means skip the first 5.
-
-- `.list$({f1:v1,...}, {fields$:['fd1','f2']})` means only return the listed fields.
-
-Note: you can use `sort$`, `limit$`, `skip$` and `fields$` together.
-
-### Native Driver
-This store is an in memory store and as such does not require the need of a native driver.
-
-## Contributing
-The [Senecajs org][] encourages open participation. If you feel you can help in any way, be it with
-documentation, examples, extra testing, or new features please get in touch.
-
-## Test
-To run tests, simply use npm:
+You will also need these peer dependencies:
 
 ```sh
-npm run test
+npm install seneca seneca-entity seneca-promisify
+```
+
+And a store plugin for the `ingest/file` entity (the raw S3 file). For local development, [`@seneca/s3-store`](https://github.com/senecajs/SenecaS3Store) in local mode works well:
+
+```sh
+npm install @seneca/s3-store
+```
+
+## Quick Start
+
+```js
+const Seneca = require('seneca')
+const S3Store = require('@seneca/s3-store')
+const Ingestor = require('@seneca/ingestor')
+
+const seneca = Seneca({ legacy: false })
+  .use('promisify')
+  .use('entity')
+  .use(S3Store, {
+    map: { '-/ingest/file': '*' },
+    folder: 'files',
+    shared: { Bucket: 'my-bucket' },
+    s3: { Region: 'us-east-1' },
+    local: {
+      active: true, // use local folder instead of real S3
+      folder: '/path/to/local/bucket',
+    },
+    ent: {
+      '-/ingest/file': { bin: 'content' }, // read file content as binary
+    },
+  })
+  .use(Ingestor, {
+    bucket: {
+      folder: '/path/to/local/bucket',
+      prefix: 'files',
+    },
+  })
+
+await seneca.ready()
+
+// Run the ingestor — reads all files from the bucket and processes each one
+const result = await seneca.post('role:ingest,cmd:run', {})
+console.log(result)
+// { ok: true, count: 2, results: [...] }
+```
+
+## Messages
+
+| Pattern                             | Description                                                                   |
+| ----------------------------------- | ----------------------------------------------------------------------------- |
+| `role:ingest,cmd:run`               | Lists all files in the bucket and dispatches `process:file` for each one      |
+| `role:ingest,process:file`          | Reads a file from S3, detects its type, and routes to a kind-specific handler |
+| `role:ingest,process:file,kind:pdf`  | Parses a PDF and writes `ingest/doc` + `ingest/page` entities                  |
+| `role:ingest,process:file,kind:xlsx` | Parses an XLSX workbook and writes `ingest/doc` + `ingest/sheet` entities      |
+| `role:ingest,process:file,kind:docx` | Parses a Word document and writes `ingest/doc` + `ingest/paragraph` entities   |
+
+## Entities
+
+| Entity        | Store      | Description                                                      |
+| ------------- | ---------- | ---------------------------------------------------------------- |
+| `ingest/file` | s3-store   | Raw binary file read from S3. Configured by the host app.        |
+| `ingest/doc`  | host store | One per processed file — metadata (filename, hash, kind, status) |
+| `ingest/page`  | host store | One per PDF page, linked to `ingest/doc` via `doc_id`             |
+| `ingest/sheet`     | host store | One per XLSX sheet, linked to `ingest/doc` via `doc_id`       |
+| `ingest/paragraph` | host store | One per DOCX paragraph, linked to `ingest/doc` via `doc_id`   |
+
+`ingest/doc` and its sub-entities are stored in whatever store the host app configures. By default Seneca uses its in-memory store.
+
+## Local Development
+
+Generate sample fixture files and run the tests:
+
+```sh
+node scripts/generate-fixtures.js
+npm test
+```
+
+## Options
+
+```js
+{
+  debug: false,
+  bucket: {
+    folder: './data/bucket',  // absolute path to the local bucket root
+    prefix: 'files',          // sub-folder within the bucket where files live
+  }
+}
 ```
 
 ## License
-Copyright (c) 2015-2016, Richard Rodger and other contributors.
-Copyright (c) 2010-2014, Richard Rodger.
+
+Copyright (c) 2024 Seneca contributors.
 Licensed under [MIT][].
 
 [MIT]: ./LICENSE
-[npm-badge]: https://badge.fury.io/js/SenecaOpensearchStore.svg
-[npm-url]: https://badge.fury.io/js/SenecaOpensearchStore
-[Senecajs org]: https://github.com/senecajs/
 [Seneca.js]: https://www.npmjs.com/package/seneca
-[@senecajs]: http://twitter.com/senecajs
-[senecajs.org]: http://senecajs.org/
-[travis-badge]: https://travis-ci.org/senecajs/SenecaOpensearchStore.svg
-[travis-url]: https://travis-ci.org/senecajs/SenecaOpensearchStore
-[gitter-badge]: https://badges.gitter.im/Join%20Chat.svg
-[gitter-url]: https://gitter.im/senecajs/seneca
-[github issue]: https://github.com/senecajs/SenecaOpensearchStore/issues
-[ActiveRecord-style data storage API]:http://senecajs.org/tutorials/understanding-data-entities.html
-[david-badge]: https://david-dm.org/senecajs/SenecaOpensearchStore.svg
-[david-url]: https://david-dm.org/senecajs/SenecaOpensearchStore
-[Coveralls]: https://coveralls.io/github/senecajs/SenecaOpensearchStore?branch=master
-[BadgeCoveralls]: https://coveralls.io/repos/github/senecajs/SenecaOpensearchStore/badge.svg?branch=master
-[seneca-basic-url]: https://github.com/senecajs/seneca-basic
-[seneca-entity-url]: https://github.com/senecajs/seneca-entity
-[OpensearchStore-tests]: https://github.com/senecajs/SenecaOpensearchStore/tree/master/test
