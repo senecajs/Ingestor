@@ -22,19 +22,18 @@ Currently supported file types:
 ## Install
 
 ```sh
-npm install @seneca/ingestor
+npm install seneca@^4 @seneca/entity @seneca/ingestor
 ```
 
-You will also need these peer dependencies:
+The plugin needs Seneca 4, `@seneca/entity` 29 or later, and Node.js 24 or
+later.
+
+You also need a store plugin for the `ingest/file` entity (the raw S3 file).
+[`@seneca/s3-store`](https://github.com/senecajs/seneca-s3-store) 3 or later
+works with S3, and in local mode with a local folder for development:
 
 ```sh
-npm install seneca seneca-entity seneca-promisify
-```
-
-And a store plugin for the `ingest/file` entity (the raw S3 file). For local development, [`@seneca/s3-store`](https://github.com/senecajs/SenecaS3Store) in local mode works well:
-
-```sh
-npm install @seneca/s3-store
+npm install @seneca/s3-store @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
 ```
 
 ## Quick Start
@@ -45,8 +44,7 @@ const S3Store = require('@seneca/s3-store')
 const Ingestor = require('@seneca/ingestor')
 
 const seneca = Seneca({ legacy: false })
-  .use('promisify')
-  .use('entity')
+  .use('@seneca/entity')
   .use(S3Store, {
     map: { '-/ingest/file': '*' },
     folder: 'files',
@@ -105,6 +103,13 @@ Generate sample fixture files and run the tests:
 node scripts/generate-fixtures.js
 npm test
 ```
+
+The tests use `@seneca/s3-store` in local mode. To run them against an S3
+compatible server as well, such as [S3Mock](https://github.com/adobe/S3Mock),
+set `SENECA_TEST_S3_ENDPOINT` (for example `http://127.0.0.1:19100`). The
+bucket is `test-bucket` unless `SENECA_TEST_S3_BUCKET` names another one, and
+`SENECA_TEST_S3_REGION`, `SENECA_TEST_S3_ACCESS_KEY` and
+`SENECA_TEST_S3_SECRET_KEY` override the region and the test credentials.
 
 ## Options
 
