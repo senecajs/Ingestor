@@ -1,6 +1,7 @@
 /* Copyright © 2024 Seneca Project Contributors, MIT License. */
 
 import * as path from 'path'
+import * as fs from 'fs'
 import { describe, test, expect } from '@jest/globals'
 
 import Seneca from 'seneca'
@@ -15,8 +16,7 @@ const FILES_PREFIX = 'files'
 function makeSeneca() {
   return Seneca({ legacy: false })
     .test()
-    .use('promisify')
-    .use('entity')
+    .use('@seneca/entity')
     .use(S3Store, {
       map: { '-/ingest/file': '*' },
       folder: FILES_PREFIX,
@@ -224,4 +224,111 @@ describe('Ingestor', () => {
 
     await seneca.close()
   })
+})
+
+
+// The same messages against an S3 compatible server, such as the s3mock
+// service of the Seneca test harness. Set SENECA_TEST_S3_ENDPOINT to run
+// them, for example http://127.0.0.1:19100. The fixture files are written to
+// the bucket through the ingest/file entity, under a folder of their own,
+// and removed again at the end.
+const S3_ENDPOINT = process.env.SENECA_TEST_S3_ENDPOINT
+const S3_BUCKET = process.env.SENECA_TEST_S3_BUCKET || 'test-bucket'
+const S3_FOLDER =
+  'ingestor-test/' + Date.now().toString(36) + Math.random().toString(36).slice(2)
+const FIXTURES = ['sample.pdf', 'sample.xlsx', 'sample.docx']
+
+function makeS3Seneca() {
+  return Seneca({ legacy: false })
+    .test()
+    .use('@seneca/entity')
+    .use(S3Store, {
+      map: { '-/ingest/file': '*' },
+      folder: S3_FOLDER,
+      shared: { Bucket: S3_BUCKET },
+      s3: {
+        endpoint: S3_ENDPOINT,
+        forcePathStyle: true,
+        region: process.env.SENECA_TEST_S3_REGION || 'us-east-1',
+        credentials: {
+          accessKeyId: process.env.SENECA_TEST_S3_ACCESS_KEY || 'test',
+          secretAccessKey: process.env.SENECA_TEST_S3_SECRET_KEY || 'test',
+        },
+      },
+      ent: {
+        '-/ingest/file': { bin: 'content' },
+      },
+    })
+    .use(Ingestor, {
+      bucket: {
+        folder: BUCKET_FOLDER,
+        prefix: FILES_PREFIX,
+      },
+    })
+}
+
+const describeS3 = S3_ENDPOINT ? describe : describe.skip
+
+describeS3('Ingestor-s3 (needs SENECA_TEST_S3_ENDPOINT)', () => {
+  test('process-files', async () => {
+    const seneca = makeS3Seneca()
+    await seneca.ready()
+
+    for (const filename of FIXTURES) {
+      await seneca
+        .entity('ingest/file')
+        .make$()
+        .data$({
+          id$: filename,
+          content: fs.readFileSync(
+            path.join(BUCKET_FOLDER, FILES_PREFIX, filename),
+          ),
+        })
+        .save$()
+    }
+
+    const pdf = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.pdf',
+    })
+    expect(pdf.ok).toBe(true)
+    expect(pdf.page_count).toBeGreaterThan(0)
+
+    const xlsx = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.xlsx',
+    })
+    expect(xlsx.ok).toBe(true)
+    expect(xlsx.sheet_count).toBe(1)
+
+    const sheets = await seneca
+      .entity('ingest/sheet')
+      .list$({ doc_id: xlsx.doc_id })
+    expect(sheets[0].sheet_name).toBe('Employees')
+    expect(sheets[0].row_count).toBe(3)
+
+    const docx = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.docx',
+    })
+    expect(docx.ok).toBe(true)
+    expect(docx.paragraph_count).toBe(3)
+
+    const again = await seneca.post('role:ingest,process:file', {
+      filename: 'sample.pdf',
+    })
+    expect(again).toMatchObject({ ok: true, why: 'already-processed' })
+
+    const missing = await seneca.post('role:ingest,process:file', {
+      filename: 'missing.pdf',
+    })
+    expect(missing).toEqual({
+      ok: false,
+      why: 'file-not-found',
+      filename: 'missing.pdf',
+    })
+
+    for (const filename of FIXTURES) {
+      await seneca.entity('ingest/file').remove$(filename)
+    }
+
+    await seneca.close()
+  }, 30000)
 })

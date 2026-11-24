@@ -9,8 +9,7 @@ import { hashContent, findOrCreateDoc, saveIfNotExists } from '../src/IngestorUt
 function makeSeneca() {
   return Seneca({ legacy: false })
     .test()
-    .use('promisify')
-    .use('entity')
+    .use('@seneca/entity')
 }
 
 describe('IngestorUtils', () => {
